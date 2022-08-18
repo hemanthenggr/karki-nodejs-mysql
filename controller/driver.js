@@ -1,4 +1,7 @@
+const FCM = require('fcm-node')
 const connection = require('./../config/db')
+
+const fcm = new FCM(process.env.FCM_SERVER_KEY)
 
 const getData = (query) => {
     return new Promise((resolve, reject) => {
@@ -38,8 +41,50 @@ const sleepUntil = async (sec) => {
     })
 }
 
-const sendNotification = (id, data) => {
-    // return
+const sendNotification = (token = "eu7GcHeCRaCRcNy13D1Dbw:APA91bF6hg2hA5qv3ruMTJpN1XhVMWvRN19wMPwhOTOMSG8eFP6yexP65L-YCIg5gQdKZOFy8i705YF2NGdpqfUd5TcgO6QARevtQj4TfWSox8NyeFAg63geJWUlXITO5_VPtPi9Vdwa", data = {
+    "Nick": "Mario",
+    "Room": "PortugalVSDenmark",
+    "title": "Portugal vs. Denmark",
+    "body": "great match!"
+}) => {
+
+    fcm.send({
+        to: token,
+        data: data
+    }, (err, response) => {
+        if(err) {
+            console.log("something has gone wrong", err);
+            console.log("Response", response);
+        }
+
+        return response
+    })
+}
+
+const getDiscountedAmount = (coupon, finalPrice) => {
+    let { min_order_amount, type: couponType, percentage, max_amount: maxAmount } = coupon
+
+    if (finalPrice < Number(min_order_amount)) return finalPrice
+
+    switch (couponType) {
+        case "flat":
+            finalPrice = finalPrice - maxAmount
+            break
+
+        case "percentage":
+            let discountAmount = finalPrice * (percentage / 100)
+            if (discountAmount > maxAmount) {
+                finalPrice = finalPrice - maxAmount
+            } else {
+                finalPrice = discountAmount
+            }
+            break
+
+        default:
+            break;
+    }
+
+    return finalPrice;
 }
 
 // book ride api
@@ -67,7 +112,7 @@ const bookMyRide = async (req, res) => {
         if (couponCode) {
             let results = await getData(`SELECT * FROM coupons WHERE code = "${couponCode}" AND is_active != 0 LIMIT 1`)
             if (results?.length == 0) return res.json(responseErrorJson("Coupon not Exist"))
-            discountedAmount = getDiscountedAmount(results, price)
+            discountedAmount = getDiscountedAmount(results[0], price)
         }
 
         let userData = await getData(`SELECT * FROM users WHERE id = "${userId}" AND status = TRUE AND user_type = 'USER'`)
@@ -245,18 +290,18 @@ const bookMyRide = async (req, res) => {
                         userOrder.driver_id = nextDriver.id
 
                         return res.json(responseSuccessJson(userOrder, "Book Ride Successfully"))
-                    } else if(currentOrderDup.status == 0) {
+                    } else if (currentOrderDup.status == 0) {
 
-                        let notification = sendNotification(nextDriver.app_token_id, {
+                        sendNotification(nextDriver.app_token_id, {
                             title: "Your raid has been missed",
                             body: ucfirst(nextDriver.first_name) + " your raid has been missed.",
                             status: "missed"
                         });
 
                         await getData(`UPDATE driver_orders SET status = 6 WHERE user_order_id = ${userOrderId}`)
-                    } else if(currentOrderDup.status == 3){
+                    } else if (currentOrderDup.status == 3) {
 
-                        let notification = sendNotification(nextDriver.app_token_id, {
+                        sendNotification(nextDriver.app_token_id, {
                             title: "Sorry, Your order has been cancelled by user",
                             body: ucfirst(nextDriver.first_name) + " your raid has been cancelled.",
                             status: "cancelled"
@@ -275,11 +320,11 @@ const bookMyRide = async (req, res) => {
                         return res.json(responseSuccessJson(userOrder, "Book Ride cancelled by user"))
                     }
 
-                    if(i == (drivers.length - 1) || userWait == 60){
+                    if (i == (drivers.length - 1) || userWait == 60) {
 
-                        let notification = sendNotification(userData.app_token_id, {
+                        sendNotification(userData.app_token_id, {
                             title: "Your booked ride cancelled",
-                            body: ucfirst(userData.first_name) + " no driver accepts Your Order, So will be cancelled.", 
+                            body: ucfirst(userData.first_name) + " no driver accepts Your Order, So will be cancelled.",
                             userOrder_id: userData.id,
                             user_id: userData.id
                         });
